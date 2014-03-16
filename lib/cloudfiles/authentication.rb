@@ -14,8 +14,8 @@ module CloudFiles
         storage_url, auth_token, headers = SwiftClient.get_auth(connection.auth_url, connection.authuser, connection.authkey, connection.snet?)
       rescue => e
         # uncomment if you suspect a problem with this branch of code
-        # $stderr.puts "got error #{e.class}: #{e.message.inspect}\n" << e.traceback.map{|n| "\t#{n}"}.join("\n")
-        raise CloudFiles::Exception::Connection, "Unable to connect to #{connection.auth_url}", caller
+        #$stderr.puts "got error #{e.class}: #{e.message.inspect}\n" << e.backtrace.map{|n| "\t#{n}"}.join("\n")
+        raise CloudFiles::Exception::Connection, "Unable to connect to #{connection.auth_url} because of #{e.class}: #{e.message.inspect} @ #{e.backtrace.first}", caller
       end
       if auth_token 
         if headers["x-cdn-management-url"]

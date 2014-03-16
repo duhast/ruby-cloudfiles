@@ -177,7 +177,7 @@ public
   def self.get_auth(url, user, key, snet=false)
     parsed, conn = http_connection(url)
     conn.start if not conn.started?
-    resp = conn.get(URI.encode(parsed.request_uri), {"x-auth-user" => user, "x-auth-key" => key })
+    resp = conn.get(URI.encode(parsed.request_uri), {"x-auth-user" => user, "x-auth-key" => key, 'content-type' => 'application/xml' })
     if resp.code.to_i < 200 or resp.code.to_i > 300
       raise ClientException.new('Account GET failed', :http_scheme=>parsed.scheme,
                   :http_host=>conn.address, :http_port=>conn.port,
