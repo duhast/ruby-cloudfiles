@@ -8,7 +8,7 @@ class SwiftClientTest < Test::Unit::TestCase
     @user = "foo_user"
     @key = "foo_key"
     @token = 'foo_token'
-    Net::HTTP.any_instance.stubs(:new).stubs({:port => 1234, :address => 'foo.bar', :class => Net::HTTP})
+    Faraday::Connection.any_instance.stubs(:new).stubs({:port => 1234, :address => 'foo.bar', :class => Faraday::Connection})
     @parsed, @conn = SwiftClient.http_connection(@url)
   end
   
@@ -62,9 +62,9 @@ class SwiftClientTest < Test::Unit::TestCase
     assert_equal 1234, parsed.port
     assert_equal 'foo.bar', parsed.host
     assert_equal '/auth/v1.0', parsed.path
-    assert_equal 'foo.bar', conn.address
+    assert_equal 'foo.bar', conn.host
     assert_equal 1234, conn.port
-    assert_equal Net::HTTP, conn.class
+    assert_equal Faraday::Connection, conn.class
   end
   
   def test_http_connection_with_ssl
@@ -73,11 +73,11 @@ class SwiftClientTest < Test::Unit::TestCase
     assert_equal 443, parsed.port
     assert_equal 'foo.bar', parsed.host
     assert_equal '/auth/v1.0', parsed.path
-    assert_equal 'foo.bar', conn.address
+    assert_equal 'foo.bar', conn.host
     assert_equal 443, conn.port
-    assert_equal Net::HTTP, conn.class
-    assert_equal true, conn.use_ssl?
-    assert_equal OpenSSL::SSL::VERIFY_NONE, conn.verify_mode
+    assert_equal Faraday::Connection, conn.class
+    #assert_equal true, conn.use_ssl?
+    assert_equal false, conn.ssl.verify
   end
   
   def test_http_connection_with_bad_scheme
@@ -91,7 +91,7 @@ class SwiftClientTest < Test::Unit::TestCase
       :code => "200", 
       :header => {'x-storage-url' => 'http://foo.bar:1234/v1/AUTH_test', 'x-storage-token' => 'AUTH_test', 'x-auth-token' => 'AUTH_test', 'content-length' => 0, 'date' => 'Tue, 11 Oct 2011 20:54:06 GMT'}
     )
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:started?).returns(true)
     conn.stubs(:get).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -107,7 +107,7 @@ class SwiftClientTest < Test::Unit::TestCase
       :code => "200", 
       :header => {'x-storage-url' => 'http://foo.bar:1234/v1/AUTH_test', 'x-storage-token' => 'AUTH_test', 'x-auth-token' => 'AUTH_test', 'content-length' => 0, 'date' => 'Tue, 11 Oct 2011 20:54:06 GMT'}
     )
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:started?).returns(true)
     conn.stubs(:get).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -120,8 +120,8 @@ class SwiftClientTest < Test::Unit::TestCase
   
   def test_auth_fails
     response = stub(:code => '500', :message => "Internal Server Error")
-    conn = mock("Net::HTTP")
-    conn.stubs(:address).returns('foobar.com')
+    conn = mock("Faraday::Connection")
+    conn.stubs(:host).returns('foobar.com')
     conn.stubs(:port).returns(123)
     conn.stubs(:started?).returns(false)
     conn.stubs(:start).returns(nil)
@@ -139,7 +139,7 @@ class SwiftClientTest < Test::Unit::TestCase
       :code => "200", 
       :header => {'x-account-object-count' => 123, 'x-account-bytes-used' => 123456, 'x-account-container-count' => 12, 'accept-ranges' => 'bytes', 'content-length' => 12345, 'content-type' => 'application/json; charset=utf-8', 'x-trans-id' => 'txfoobar', 'date' => 'Thu, 13 Oct 2011 21:04:14 GMT'}
     )
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:started?).returns(true)
     conn.stubs(:head).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -156,8 +156,8 @@ class SwiftClientTest < Test::Unit::TestCase
       :code => "500",
       :message => "Internal Error" 
     )
-    conn = mock("Net::HTTP")
-    conn.stubs(:address).returns("foobar.com")
+    conn = mock("Faraday::Connection")
+    conn.stubs(:host).returns("foobar.com")
     conn.stubs(:port).returns(123)
     conn.stubs(:started?).returns(true)
     conn.stubs(:head).returns(response)
@@ -174,7 +174,7 @@ class SwiftClientTest < Test::Unit::TestCase
       :body => '[ { "name":".CDN_ACCESS_LOGS", "count":1, "bytes":1234 }, { "name":"First", "count":2, "bytes":2345 }, { "name":"Second", "count":3, "bytes":3456 }, { "name":"Third", "count":4, "bytes":4567 } ]', 
       :header => {'x-account-object-count' => 123, 'x-account-bytes-used' => 123456, 'x-account-container-count' => 12, 'accept-ranges' => 'bytes', 'content-length' => 12345, 'content-type' => 'application/json; charset=utf-8', 'x-trans-id' => 'txfoobar', 'date' => 'Thu, 13 Oct 2011 21:04:14 GMT'}
     )
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:started?).returns(true)
     conn.stubs(:get).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -191,7 +191,7 @@ class SwiftClientTest < Test::Unit::TestCase
       :body => nil, 
       :header => {'x-account-object-count' => 123, 'x-account-bytes-used' => 123456, 'x-account-container-count' => 12, 'accept-ranges' => 'bytes', 'content-length' => 12345, 'content-type' => 'application/json; charset=utf-8', 'x-trans-id' => 'txfoobar', 'date' => 'Thu, 13 Oct 2011 21:04:14 GMT'}
     )
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:started?).returns(true)
     conn.stubs(:get).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -208,7 +208,7 @@ class SwiftClientTest < Test::Unit::TestCase
       :body => '[ { "name":"Second", "count":3, "bytes":3456 }, { "name":"Third", "count":4, "bytes":4567 } ]', 
       :header => {'x-account-object-count' => 123, 'x-account-bytes-used' => 123456, 'x-account-container-count' => 12, 'accept-ranges' => 'bytes', 'content-length' => 12345, 'content-type' => 'application/json; charset=utf-8', 'x-trans-id' => 'txfoobar', 'date' => 'Thu, 13 Oct 2011 21:04:14 GMT'}
     )
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:started?).returns(true)
     conn.stubs(:get).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -225,7 +225,7 @@ class SwiftClientTest < Test::Unit::TestCase
       :body => '[ { "name":".CDN_ACCESS_LOGS", "count":1, "bytes":1234 }, { "name":"First", "count":2, "bytes":2345 } ]', 
       :header => {'x-account-object-count' => 123, 'x-account-bytes-used' => 123456, 'x-account-container-count' => 12, 'accept-ranges' => 'bytes', 'content-length' => 12345, 'content-type' => 'application/json; charset=utf-8', 'x-trans-id' => 'txfoobar', 'date' => 'Thu, 13 Oct 2011 21:04:14 GMT'}
     )
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:started?).returns(true)
     conn.stubs(:get).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -242,7 +242,7 @@ class SwiftClientTest < Test::Unit::TestCase
       :body => '[ { "name":"First", "count":2, "bytes":2345 } ]', 
       :header => {'x-account-object-count' => 123, 'x-account-bytes-used' => 123456, 'x-account-container-count' => 12, 'accept-ranges' => 'bytes', 'content-length' => 12345, 'content-type' => 'application/json; charset=utf-8', 'x-trans-id' => 'txfoobar', 'date' => 'Thu, 13 Oct 2011 21:04:14 GMT'}
     )
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:started?).returns(true)
     conn.stubs(:get).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -270,7 +270,7 @@ class SwiftClientTest < Test::Unit::TestCase
       :header => {'x-account-object-count' => 123, 'x-account-bytes-used' => 123456, 'x-account-container-count' => 12, 'accept-ranges' => 'bytes', 'content-length' => 12345, 'content-type' => 'application/json; charset=utf-8', 'x-trans-id' => 'txfoobar', 'date' => 'Thu, 13 Oct 2011 21:04:14 GMT'}
     )
     
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:started?).returns(true)
     conn.stubs(:get).at_least(3).at_most(3).returns(response1, response2, response3)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -286,8 +286,8 @@ class SwiftClientTest < Test::Unit::TestCase
       :code => "500",
       :message => "Internal Error"
     )
-    conn = mock("Net::HTTP")
-    conn.stubs(:address).returns("foobar.com")
+    conn = mock("Faraday::Connection")
+    conn.stubs(:host).returns("foobar.com")
     conn.stubs(:port).returns(123)
     conn.stubs(:started?).returns(true)
     conn.stubs(:get).returns(response)
@@ -300,7 +300,7 @@ class SwiftClientTest < Test::Unit::TestCase
   #test POST account
   def test_post_account
     response = stub(:code => 204, :body => nil)
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:started?).returns(true)
     conn.stubs(:post).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -314,8 +314,8 @@ class SwiftClientTest < Test::Unit::TestCase
       :code => "500",
       :message => "Internal Error"
     )
-    conn = mock("Net::HTTP")
-    conn.stubs(:address).returns("foobar.com")
+    conn = mock("Faraday::Connection")
+    conn.stubs(:host).returns("foobar.com")
     conn.stubs(:port).returns(123)
     conn.stubs(:started?).returns(true)
     conn.stubs(:post).returns(response)
@@ -331,7 +331,7 @@ class SwiftClientTest < Test::Unit::TestCase
       :code => "204", 
       :header => {'x-container-object-count' => 6, 'x-container-meta-baz' => 'que', 'x-container-meta-foo' => 'bar', 'x-container-bytes-used' => 123456, 'accept-ranges' => 'bytes', 'content-length' => 83, 'content-type' => 'text/plain; charset=utf-8', 'x-trans-id' => 'txfoo123', 'date' => 'Thu, 13 Oct 2011 22:29:14 GMT'}
     )
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:started?).returns(true)
     conn.stubs(:head).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -343,8 +343,8 @@ class SwiftClientTest < Test::Unit::TestCase
   
   def test_head_container_fail
     response = stub(:code => "500", :message => "failed")
-    conn = mock("Net::HTTP")
-    conn.stubs(:address).returns("foobar.com")
+    conn = mock("Faraday::Connection")
+    conn.stubs(:host).returns("foobar.com")
     conn.stubs(:port).returns(123)
     conn.stubs(:started?).returns(true)
     conn.stubs(:head).returns(response)
@@ -362,7 +362,7 @@ class SwiftClientTest < Test::Unit::TestCase
       :header => {'x-container-object-count' => 6, 'x-container-meta-baz' => 'que', 'x-container-meta-foo' => 'bar', 'x-container-bytes-used' => 123456, 'accept-ranges' => 'bytes', 'content-length' => 83, 'content-type' => 'text/plain; charset=utf-8', 'x-trans-id' => 'txfoo123', 'date' => 'Thu, 13 Oct 2011 22:29:14 GMT'}, 
       :body => '[ { "name":"foo.mp4", "hash":"foo_hash", "bytes":1234567, "content_type":"video/mp4", "last_modified":"2011-06-21T19:49:06.607670" }, { "name":"bar.ogv", "hash":"bar_hash", "bytes":987654, "content_type":"video/ogg", "last_modified":"2011-06-21T19:48:57.504050" }, { "name":"baz.webm", "hash":"baz_hash", "bytes":1239874, "content_type":"application/octet-stream", "last_modified":"2011-06-21T19:48:43.923990" }, { "name":"fobarbaz.html", "hash":"foobarbaz_hash", "bytes":12893467, "content_type":"text/html", "last_modified":"2011-06-21T19:54:36.555070" } ]'
     )
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:started?).returns(true)
     conn.stubs(:get).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -380,7 +380,7 @@ class SwiftClientTest < Test::Unit::TestCase
       :body => nil, 
       :header => {'x-container-object-count' => 123, 'x-container-bytes-used' => 123456, 'x-container-object-count' => 12, 'accept-ranges' => 'bytes', 'content-length' => 12345, 'content-type' => 'application/json; charset=utf-8', 'x-trans-id' => 'txfoobar', 'date' => 'Thu, 13 Oct 2011 21:04:14 GMT'}
     )
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:started?).returns(true)
     conn.stubs(:get).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -397,7 +397,7 @@ class SwiftClientTest < Test::Unit::TestCase
       :body => '[ { "name":"bar.ogv", "hash":"bar_hash", "bytes":987654, "content_type":"video/ogg", "last_modified":"2011-06-21T19:48:57.504050" }, { "name":"baz.webm", "hash":"baz_hash", "bytes":1239874, "content_type":"application/octet-stream", "last_modified":"2011-06-21T19:48:43.923990" }, { "name":"fobarbaz.html", "hash":"foobarbaz_hash", "bytes":12893467, "content_type":"text/html", "last_modified":"2011-06-21T19:54:36.555070" } ]',
       :header => {'x-container-object-count' => 123, 'x-container-bytes-used' => 123456, 'x-container-object-count' => 12, 'accept-ranges' => 'bytes', 'content-length' => 12345, 'content-type' => 'application/json; charset=utf-8', 'x-trans-id' => 'txfoobar', 'date' => 'Thu, 13 Oct 2011 21:04:14 GMT'}
     )
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:started?).returns(true)
     conn.stubs(:get).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -414,7 +414,7 @@ class SwiftClientTest < Test::Unit::TestCase
       :body => '[ { "name":"foo.mp4", "hash":"foo_hash", "bytes":1234567, "content_type":"video/mp4", "last_modified":"2011-06-21T19:49:06.607670" }, { "name":"bar.ogv", "hash":"bar_hash", "bytes":987654, "content_type":"video/ogg", "last_modified":"2011-06-21T19:48:57.504050" } ]',
       :header => {'x-container-object-count' => 123, 'x-container-bytes-used' => 123456, 'x-container-object-count' => 12, 'accept-ranges' => 'bytes', 'content-length' => 12345, 'content-type' => 'application/json; charset=utf-8', 'x-trans-id' => 'txfoobar', 'date' => 'Thu, 13 Oct 2011 21:04:14 GMT'}
     )
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:started?).returns(true)
     conn.stubs(:get).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -432,7 +432,7 @@ class SwiftClientTest < Test::Unit::TestCase
       :body => '[ { "name":"bar.ogv", "hash":"bar_hash", "bytes":987654, "content_type":"video/ogg", "last_modified":"2011-06-21T19:48:57.504050" }, { "name":"baz.webm", "hash":"baz_hash", "bytes":1239874, "content_type":"application/octet-stream", "last_modified":"2011-06-21T19:48:43.923990" }]',
       :header => {'x-container-object-count' => 123, 'x-container-bytes-used' => 123456, 'x-container-object-count' => 12, 'accept-ranges' => 'bytes', 'content-length' => 12345, 'content-type' => 'application/json; charset=utf-8', 'x-trans-id' => 'txfoobar', 'date' => 'Thu, 13 Oct 2011 21:04:14 GMT'}
     )
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:started?).returns(true)
     conn.stubs(:get).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -460,7 +460,7 @@ class SwiftClientTest < Test::Unit::TestCase
       :body => '[]'
     )
     
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:started?).returns(true)
     conn.stubs(:get).at_least(3).at_most(3).returns(response1, response2, response3)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -473,8 +473,8 @@ class SwiftClientTest < Test::Unit::TestCase
   
   def test_get_container_fail
     response = stub(:code => "500", :message => "failed")
-    conn = mock("Net::HTTP")
-    conn.stubs(:address).returns("foobar.com")
+    conn = mock("Faraday::Connection")
+    conn.stubs(:host).returns("foobar.com")
     conn.stubs(:port).returns(123)
     conn.stubs(:started?).returns(true)
     conn.stubs(:get).returns(response)
@@ -488,7 +488,7 @@ class SwiftClientTest < Test::Unit::TestCase
   #test PUT container
   def test_put_container
     response = stub(:code => "200")
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:started?).returns(true)
     conn.stubs(:put).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -500,8 +500,8 @@ class SwiftClientTest < Test::Unit::TestCase
   
   def test_put_container_fail
     response = stub(:code => "500", :message => "failed")
-    conn = mock("Net::HTTP")
-    conn.stubs(:address).returns("foobar.com")
+    conn = mock("Faraday::Connection")
+    conn.stubs(:host).returns("foobar.com")
     conn.stubs(:port).returns(123)
     conn.stubs(:started?).returns(true)
     conn.stubs(:put).returns(response)
@@ -515,7 +515,7 @@ class SwiftClientTest < Test::Unit::TestCase
   #test POST container
   def test_post_container
     response = stub(:code => "200")
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:started?).returns(true)
     conn.stubs(:post).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -527,8 +527,8 @@ class SwiftClientTest < Test::Unit::TestCase
   
   def test_post_container_fail
     response = stub(:code => "500", :message => "failed")
-    conn = mock("Net::HTTP")
-    conn.stubs(:address).returns("foobar.com")
+    conn = mock("Faraday::Connection")
+    conn.stubs(:host).returns("foobar.com")
     conn.stubs(:port).returns(123)
     conn.stubs(:started?).returns(true)
     conn.stubs(:post).returns(response)
@@ -542,7 +542,7 @@ class SwiftClientTest < Test::Unit::TestCase
   #test DELETE container
   def test_delete_container
     response = stub(:code => "200", :body => "")
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:started?).returns(true)
     conn.stubs(:delete).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -554,8 +554,8 @@ class SwiftClientTest < Test::Unit::TestCase
 
   def test_delete_container_fails
     response = stub(:code => "500", :message => "failed")
-    conn = mock("Net::HTTP")
-    conn.stubs(:address).returns("foobar.com")
+    conn = mock("Faraday::Connection")
+    conn.stubs(:host).returns("foobar.com")
     conn.stubs(:port).returns(123)
     conn.stubs(:started?).returns(true)
     conn.stubs(:delete).returns(response)
@@ -569,7 +569,7 @@ class SwiftClientTest < Test::Unit::TestCase
   #test HEAD object
   def test_head_object
     response = stub(:code => "204", :header => {'etag' => 'etag_foobarbaz', 'accept-ranges' => 'bytes', 'content-length' => 67773, 'content-type' => 'application/javascript', 'x-trans-id' => 'txfoobar', 'date' => 'Fri, 14 Oct 2011 01:21:42 GMT'})
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:port).returns(123)
     conn.stubs(:started?).returns(true)
     conn.stubs(:head).returns(response)
@@ -581,8 +581,8 @@ class SwiftClientTest < Test::Unit::TestCase
   
   def test_head_object_fails
     response = stub(:code => "500", :message => "failed")
-    conn = mock("Net::HTTP")
-    conn.stubs(:address).returns("foobar.com")
+    conn = mock("Faraday::Connection")
+    conn.stubs(:host).returns("foobar.com")
     conn.stubs(:port).returns(123)
     conn.stubs(:started?).returns(true)
     conn.stubs(:head).returns(response)
@@ -600,9 +600,9 @@ class SwiftClientTest < Test::Unit::TestCase
       :header => {'etag' => 'etag_foobarbaz', 'accept-ranges' => 'bytes', 'content-length' => 67773, 'content-type' => 'application/javascript', 'x-trans-id' => 'txfoobar', 'date' => 'Fri, 14 Oct 2011 01:21:42 GMT'},
       :body => "this is the body"
     )
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:port).returns(123)
-    conn.stubs(:address).returns("foobar.com")
+    conn.stubs(:host).returns("foobar.com")
     conn.stubs(:started?).returns(true)
     conn.stubs(:request_get).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -616,9 +616,9 @@ class SwiftClientTest < Test::Unit::TestCase
   
   def test_get_object_fails
     response = stub(:code => "404", :message => "object not found", :body => "")
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:port).returns(123)
-    conn.stubs(:address).returns("foobar.com")
+    conn.stubs(:host).returns("foobar.com")
     conn.stubs(:started?).returns(true)
     conn.stubs(:request_get).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -636,9 +636,9 @@ class SwiftClientTest < Test::Unit::TestCase
       :message => "created", 
       :body => ""
     )
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:port).returns(123)
-    conn.stubs(:address).returns("foobar.com")
+    conn.stubs(:host).returns("foobar.com")
     conn.stubs(:started?).returns(true)
     conn.stubs(:put).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -653,9 +653,9 @@ class SwiftClientTest < Test::Unit::TestCase
       :message => "internal server error", 
       :body => ""
     )
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:port).returns(123)
-    conn.stubs(:address).returns("foobar.com")
+    conn.stubs(:host).returns("foobar.com")
     conn.stubs(:started?).returns(true)
     conn.stubs(:put).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -672,9 +672,9 @@ class SwiftClientTest < Test::Unit::TestCase
       :message => "created", 
       :body => ""
     )
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:port).returns(123)
-    conn.stubs(:address).returns("foobar.com")
+    conn.stubs(:host).returns("foobar.com")
     conn.stubs(:started?).returns(true)
     conn.stubs(:post).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -689,9 +689,9 @@ class SwiftClientTest < Test::Unit::TestCase
       :message => "no such object", 
       :body => ""
     )
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:port).returns(123)
-    conn.stubs(:address).returns("foobar.com")
+    conn.stubs(:host).returns("foobar.com")
     conn.stubs(:started?).returns(true)
     conn.stubs(:post).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -707,7 +707,7 @@ class SwiftClientTest < Test::Unit::TestCase
       :message => "no content",
       :body => ""
     )
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:started?).returns(true)
     conn.stubs(:delete).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -722,9 +722,9 @@ class SwiftClientTest < Test::Unit::TestCase
       :message => "no such object",
       :body => ""
     )
-    conn = mock("Net::HTTP")
+    conn = mock("Faraday::Connection")
     conn.stubs(:port).returns(123)
-    conn.stubs(:address).returns("foobar.com")
+    conn.stubs(:host).returns("foobar.com")
     conn.stubs(:started?).returns(true)
     conn.stubs(:delete).returns(response)
     SwiftClient.expects(:http_connection).returns([@parsed, conn])
@@ -758,7 +758,7 @@ class SwiftClientTest < Test::Unit::TestCase
       {'Last-Modified' => 'Tue, 01 Jan 2011 00:00:01 GMT', 'Etag' => 'somelarge123hashthingy123foobar', 'Accept-Ranges' => 'bytes', 'Content-Length' => 29, 'Content-Type' => 'application/x-www-form-urlencoded', 'X-Trans-Id' => 'txffffffff00000001231231232112321', 'Date' => 'Tue, 01 Jan 2011 00:00:02 GMT', 'foo' => 'bar'},
       "some data that is from swift"
     ]
-    SwiftClient.expects(:http_connection).returns(Net::HTTPExceptions, [@parsed, @conn])
+    SwiftClient.expects(:http_connection).returns(Faraday::Error, [@parsed, @conn])
     SwiftClient.expects(:get_auth).returns(auth_response)
     SwiftClient.expects(:get_account).returns(account_response)
     SwiftClient.expects(:head_account).returns(account_response[0])

@@ -61,6 +61,7 @@ Gem::Specification.new do |s|
   ]
 
   s.add_dependency('json')
+  s.add_dependency('faraday')
 
   if s.respond_to? :specification_version then
     s.specification_version = 3

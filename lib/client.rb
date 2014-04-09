@@ -1,6 +1,8 @@
 require 'rubygems'
+require 'faraday'
 require 'uri'
 require 'json'
+
 
 class ClientException < StandardError
   attr_reader :scheme, :host, :port, :path, :query, :status, :reason, :devices
@@ -149,21 +151,19 @@ private
 public
   def self.http_connection(url, proxy_host=nil, proxy_port=nil)
     parsed = URI::parse(url)
-    
-    if parsed.scheme == 'http'
-      require 'net/http'
-      conn = Net::HTTP::Proxy(proxy_host, proxy_port).new(parsed.host, parsed.port)
-      [parsed, conn]
-    elsif parsed.scheme == 'https'
-      require 'net/https'
-      conn = Net::HTTP::Proxy(proxy_host, proxy_port).new(parsed.host, parsed.port)
-      conn.use_ssl = true
-      conn.verify_mode = OpenSSL::SSL::VERIFY_NONE
-      [parsed, conn]
-    else
-      raise ClientException.new(
-        "Cannot handle protocol scheme #{parsed.scheme} for #{url} %s")
+
+    options = {ssl: {verify: false}}
+    if proxy_host
+      proxy_url = ''
+      proxy_url << 'http://' unless proxy_host !~ /^http/
+      proxy_url << proxy_host
+      proxy_url << ':' << proxy_port if proxy_port
+      options[:proxy] = proxy_url
     end
+    conn = Faraday.new(url, options)
+    raise ClientException.new("Cannot handle protocol scheme #{parsed.scheme} for #{url} %s") unless parsed.scheme =~ /https?/
+
+    [parsed, conn]
   end
   
   def http_connection
@@ -173,22 +173,33 @@ public
       @http_conn
     end
   end
+
+  def self.check_error(operation, resp, conn, parsed)
+    if resp.status.to_i < 200 or resp.status.to_i > 300
+      raise ClientException.new("#{operation} failed",
+                  :http_scheme => parsed.scheme,
+                  :http_host => conn.host,
+                  :http_port => conn.port,
+                  :http_path => parsed.path,
+                  :http_query => parsed.query,
+                  :http_status => resp.status,
+                  :http_reason => resp.body
+            )
+    end
+  end
   
   def self.get_auth(url, user, key, snet=false)
     parsed, conn = http_connection(url)
-    conn.start if not conn.started?
-    resp = conn.get(URI.encode(parsed.request_uri), {"x-auth-user" => user, "x-auth-key" => key, 'content-type' => 'application/xml' })
-    if resp.code.to_i < 200 or resp.code.to_i > 300
-      raise ClientException.new('Account GET failed', :http_scheme=>parsed.scheme,
-                  :http_host=>conn.address, :http_port=>conn.port,
-                  :http_path=>parsed.path, :http_query=>parsed.query, :http_status=>resp.code,
-                  :http_reason=>resp.message)
-    end
-    url = URI::parse(resp.header['x-storage-url'])
+    #conn.start if not conn.started?
+    resp = conn.get(URI.encode(parsed.request_uri), {}, {"x-auth-user" => user, "x-auth-key" => key, 'content-type' => 'application/xml' })
+    
+    check_error('Account GET', resp, conn, parsed)
+
+    url = URI::parse(resp.headers['x-storage-url'])
     if snet
       url.host = "snet-#{url.host}"
     end
-    [url.to_s, resp.header['x-auth-token'], resp.header]
+    [url.to_s, resp.headers['x-auth-token'], resp.headers]
   end
   
   def get_auth
@@ -221,19 +232,16 @@ public
     query.add('limit', quote(limit.to_s)) if limit
     query.add('prefix', quote(prefix.to_s)) if prefix
     parsed.query = query.to_url_params
-    conn.start if !conn.started?
+    #conn.start if !conn.started?
     resp = conn.get(parsed.request_uri, {'x-auth-token' => token})
-    if resp.code.to_i < 200 or resp.code.to_i > 300
-      raise ClientException.new('Account GET failed', :http_scheme=>parsed.scheme,
-                  :http_host=>conn.address, :http_port=>conn.port,
-                  :http_path=>parsed.path, :http_query=>parsed.query, :http_status=>resp.code,
-                  :http_reason=>resp.message)
-    end
+    
+    check_error('Account GET', resp, conn, parsed)
+
     resp_headers = {}
     resp.header.each do |k,v|
       resp_headers[k.downcase] = v
     end
-    if resp.code.to_i == 204
+    if resp.status.to_i == 204
       [resp_headers, []]
     else
       [resp_headers, JSON.parse(resp.body)]
@@ -250,14 +258,10 @@ public
     end
     parsed = http_conn[0].clone
     conn = http_conn[1]
-    conn.start if !conn.started?
+    #conn.start if !conn.started?
     resp = conn.head(parsed.request_uri, {'x-auth-token' => token})
-    if resp.code.to_i < 200 or resp.code.to_i > 300
-      raise ClientException.new('Account HEAD failed', :http_scheme=>parsed.scheme,
-              :http_host=>conn.address, :http_port=>conn.port,
-              :http_path=>parsed.path, :http_status=>resp.code,
-              :http_reason=>resp.message)
-    end
+    
+    check_error('Account HEAD', resp, conn, parsed)
     resp_headers = {}
     resp.header.each do |k,v|
       resp_headers[k.downcase] = v
@@ -276,16 +280,14 @@ public
     parsed = http_conn[0].clone
     conn = http_conn[1]
     headers['x-auth-token'] = token
-    conn.start if !conn.started?
+    #conn.start if !conn.started?
     resp = conn.post(parsed.request_uri, nil, headers)
-    if resp.code.to_i < 200 or resp.code.to_i > 300
-      raise ClientException.new('Account POST failed', :http_scheme=>parsed.scheme,
-              :http_host=>conn.address, :http_port=>conn.port,
-              :http_path=>parsed.path, :http_status=>resp.code,
-              :http_reason=>resp.message)
-    end
+    
+    check_error('Account POST', resp, conn, parsed)
+
     resp.body
   end
+
   def post_account(headers=nil)
     _retry(nil, :post_account, [headers, @http_conn])
   end
@@ -317,20 +319,17 @@ public
     query.add('limit', quote(limit.to_s)) if limit
     query.add('prefix', quote(prefix.to_s)) if prefix
     parsed.query = query.to_url_params
-    conn.start if !conn.started?
+    #conn.start if !conn.started?
     parsed.path += "/#{quote(container)}"
     resp = conn.get(parsed.request_uri, {'x-auth-token' => token})
-    if resp.code.to_i < 200 or resp.code.to_i > 300
-      raise ClientException.new('Container GET failed', :http_scheme=>parsed.scheme,
-                  :http_host=>conn.address, :http_port=>conn.port,
-                  :http_path=>parsed.path, :http_query=>parsed.query, :http_status=>resp.code,
-                  :http_reason=>resp.message)
-    end
+    
+    check_error('Container GET', resp, conn, parsed)
+
     resp_headers = {}
     resp.header.each do |k,v|
       resp_headers[k.downcase] = v
     end
-    if resp.code.to_i == 204
+    if resp.status.to_i == 204
       [resp_headers, []]
     else
       [resp_headers, JSON.parse(resp.body())]
@@ -348,17 +347,13 @@ public
     parsed = http_conn[0].clone
     conn = http_conn[1]
     
-    conn.start if !conn.started?
+    #conn.start if !conn.started?
     parsed.path += "/#{quote(container)}"
-    resp = conn.head(parsed.request_uri, {'x-auth-token' => token})
-    if resp.code.to_i < 200 or resp.code.to_i > 300
-      raise ClientException.new('Container HEAD failed', :http_scheme=>parsed.scheme,
-                  :http_host=>conn.address, :http_port=>conn.port,
-                  :http_path=>parsed.path, :http_status=>resp.code,
-                  :http_reason=>resp.message)
-    end
+    resp = conn.head(parsed.request_uri, {}, {'x-auth-token' => token})
+    
+    check_error('Container HEAD', resp, conn, parsed)
     resp_headers = {}
-    resp.header.each do |k,v|
+    resp.headers.each do |k,v|
       resp_headers[k.downcase] = v
     end
     resp_headers
@@ -375,17 +370,13 @@ public
     parsed = http_conn[0].clone
     conn = http_conn[1]
     
-    conn.start if !conn.started?
+    #conn.start if !conn.started?
     parsed.path += "/#{quote(container)}"
     headers['x-auth-token'] = token
     # headers['content-length'] = 0
     resp = conn.put(parsed.request_uri, nil, headers)
-    if resp.code.to_i < 200 or resp.code.to_i > 300
-      raise ClientException.new('Container PUT failed', :http_scheme=>parsed.scheme,
-                  :http_host=>conn.address, :http_port=>conn.port,
-                  :http_path=>parsed.path, :http_status=>resp.code,
-                  :http_reason=>resp.message)  
-    end
+    
+    check_error('Container PUT', resp, conn, parsed)
   end
   
   def put_container(container, headers={})
@@ -399,16 +390,12 @@ public
     parsed = http_conn[0].clone
     conn = http_conn[1]
     
-    conn.start if !conn.started?
+    #conn.start if !conn.started?
     parsed.path += "/#{quote(container)}"
     headers['x-auth-token'] = token
     resp = conn.post(parsed.request_uri, nil, headers)
-    if resp.code.to_i < 200 or resp.code.to_i > 300
-      raise ClientException.new('Container POST failed', :http_scheme=>parsed.scheme,
-                  :http_host=>conn.address, :http_port=>conn.port,
-                  :http_path=>parsed.path, :http_status=>resp.code,
-                  :http_reason=>resp.message)
-    end
+    
+    check_error('Container POST', resp, conn, parsed)
   end
   
   def post_container(container, headers={})
@@ -422,16 +409,12 @@ public
     parsed = http_conn[0].clone
     conn = http_conn[1]
     
-    conn.start if !conn.started?
+    #conn.start if !conn.started?
     parsed.path += "/#{quote(container)}"
     headers['x-auth-token'] = token
     resp = conn.delete(parsed.request_uri, headers)
-    if resp.code.to_i < 200 or resp.code.to_i > 300
-      raise ClientException.new('Container DELETE failed', :http_scheme=>parsed.scheme,
-                  :http_host=>conn.address, :http_port=>conn.port,
-                  :http_path=>parsed.path, :http_status=>resp.code,
-                  :http_reason=>resp.message)
-    end
+    
+    check_error('Container DELETE', resp, conn, parsed)
   end
   
   def delete_container(container)
@@ -447,7 +430,7 @@ public
     
 
     parsed.path += "/#{quote(container)}/#{quote(name)}"
-    conn.start if not conn.started?
+    #conn.start if not conn.started?
     headers = {'x-auth-token' => token}
     if block_given?
       resp = conn.request_get(parsed.request_uri, headers) do |r|
@@ -460,14 +443,10 @@ public
       resp = conn.request_get(parsed.request_uri, headers)
       object_body = resp.body  
     end
-    if resp.code.to_i < 200 or resp.code.to_i > 300
-      raise ClientException.new('Object GET failed', :http_scheme=>parsed.scheme,
-                  :http_host=>conn.address, :http_port=>conn.port,
-                  :http_path=>parsed.path, :http_status=>resp.code,
-                  :http_reason=>resp.message)
-    end
+    
+    check_error('Object GET', resp, conn, parsed)
     resp_headers = {}
-    resp.header.each do |k,v|
+    resp.headers.each do |k,v|
       resp_headers[k.downcase] = v
     end
     [resp_headers, object_body]
@@ -486,16 +465,12 @@ public
     
 
     parsed.path += "/#{quote(container)}/#{quote(name)}"
-    conn.start if not conn.started?
+    #conn.start if not conn.started?
     resp = conn.head(parsed.request_uri, {'x-auth-token' => token})
-    if resp.code.to_i < 200 or resp.code.to_i > 300
-      raise ClientException.new('Object HEAD failed', :http_scheme=>parsed.scheme,
-                  :http_host=>conn.address, :http_port=>conn.port,
-                  :http_path=>parsed.path, :http_status=>resp.code,
-                  :http_reason=>resp.message)
-    end
+    
+    check_error('Object HEAD', resp, conn, parsed)
     resp_headers = {}
-    resp.header.each do |k,v|
+    resp.headers.each do |k,v|
       resp_headers[k.downcase] = v
     end
     resp_headers
@@ -542,16 +517,12 @@ public
         http.request(request)
       end
     else
-      conn.start if not conn.started?
+      #conn.start if not conn.started?
       resp = conn.put(parsed.request_uri, contents, headers)
     end
-    if resp.code.to_i < 200 or resp.code.to_i > 300
-      raise ClientException.new('Object PUT failed', :http_scheme=>parsed.scheme,
-                  :http_host=>conn.address, :http_port=>conn.port,
-                  :http_path=>parsed.path, :http_status=>resp.code,
-                  :http_reason=>resp.message)
-    end
-    resp.header['etag']
+    
+    check_error('Object PUT', resp, conn, parsed)
+    resp.headers['etag']
   end
   
   def put_object(container, obj, contents, content_length=nil, etag=nil, chunk_size=65536, content_type=nil, headers={})
@@ -580,12 +551,7 @@ public
     parsed.path += "/#{quote(name)}" if name
     headers['x-auth-token'] = token if token
     resp = conn.post(parsed.request_uri, nil, headers)
-    if resp.code.to_i < 200 or resp.code.to_i > 300
-      raise ClientException.new('Object POST failed', :http_scheme=>parsed.scheme,
-                  :http_host=>conn.address, :http_port=>conn.port,
-                  :http_path=>parsed.path, :http_status=>resp.code,
-                  :http_reason=>resp.message)
-    end
+    check_error('Object POST', resp, conn, parsed)
   end
   
   def post_object(container, name, headers={})
@@ -599,17 +565,12 @@ public
     parsed = http_conn[0].clone
     conn = http_conn[1]
     
-    conn.start if !conn.started?
+    #conn.start if !conn.started?
     parsed.path += "/#{quote(container)}" if container
     parsed.path += "/#{quote(name)}" if name
     headers['x-auth-token'] = token if token
     resp = conn.delete(parsed.request_uri, headers)
-    if resp.code.to_i < 200 or resp.code.to_i > 300
-      raise ClientException.new('Object DELETE failed', :http_scheme=>parsed.scheme,
-                  :http_host=>conn.address, :http_port=>conn.port,
-                  :http_path=>parsed.path, :http_status=>resp.code,
-                  :http_reason=>resp.message)
-    end
+    check_error('Object DELETE', resp, conn, parsed)
   end
   
   def delete_object(container, name, headers={})
